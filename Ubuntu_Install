@@ -1,0 +1,149 @@
+This guide expects you to have some knowledge of Ubuntu or Linux in general. Some steps are not described that much since I would expect you to do it without exact step by step instructions. 
+
+Download Ubuntu - http://mirror.anl.gov/pub/ubuntu-iso/CDs-Xubuntu/12.10/release/xubuntu-12.10-desktop-amd64.iso
+
+Install Ubuntu.
+
+Download all the drivers – 
+
+File is called: ADL_SDK_6.0.zip
+http://developer.amd.com/tools-and-sdks/graphics-development/display-library-adl-sdk/
+
+File is called: AMD-APP-SDK-v2.9-lnx64.tgz
+http://developer.amd.com/tools-and-sdks/heterogeneous-computing/amd-accelerated-parallel-processing-app-sdk/downloads/
+
+File is called: amd-catalyst-13.12-linux-x86.x86_64.zip
+http://support.amd.com/en-us/download/desktop?os=Linux%20x86_64
+
+ Download cgminer source from 3.7.2 the latest version that has support for scrypt.
+File is called: http://ck.kolivas.org/apps/cgminer/3.7/cgminer-3.7.2.tar.bz2
+
+1. Time to download and install packages required to build cgminer from source.
+
+sudo apt-get -y install build-essential unzip cmake automake libncurses5-dev autoconf libcurl4-openssl-dev pkg-config automake yasm
+
+2. Time to install. Start off by installing the ATI drivers, simply extract the package 
+
+unzip amd-catalyst-13.12-linux-x86.x86_64.zip
+sudo chmod +x amd-catalyst-13.12-linux-x86.x86_64.run
+sudo ./ amd-catalyst-13.12-linux-x86.x86_64.run
+sudo reboot
+
+3. Install the AMD SDK. Create a folder called SDK. Move the file to that folder and execute:
+
+mkdir AMD-APP-SDK
+mv  AMD-APP-SDK-v2.9-lnx64.tgz AMD-APP-SDK
+cd AMD-APP-SDK
+tar xvf AMD-APP-SDK-v2.9-lnx64.tgz
+
+Install it using the Install script.sh. It will say that this version is newer then the version installed, that is fine and that is what we want!
+
+sudo reboot
+
+ 
+4. Execute:
+
+sudo aticonfig --adapter=all -f --initial
+
+sudo reboot
+
+5. Make sure all your cards are visible. Execute:
+
+sudo aticonfig –lsa
+
+6. If all is good, execute:
+
+sudo aticonfig --adapter=all --odgt
+
+sudo reboot
+
+7. All cards should still be visible. Verify by executing the same command again
+
+sudo aticonfig --lsa
+
+8. Unpack cgminer source code that we downloaded earlier.
+Insert tar command
+
+9. Unpack the ADL SDK, file name we downloaded was: ADL_SDK_6.0.zip
+
+unzip ADL_SDK_6.0.zip
+
+The folder "include" contains the files that we require in cgminer to be able to give cgminer some more power over the ATI cards. Copy all contents in the include folder in the ADL SDK folder and into the ADL_SDK folder of the cgminer folder you unpacked in step 18. Something like this perhaps
+
+cp ADL_SDK/include/*  /home/user/cgminer/ADL_SDK/
+
+10. Time to compile cgminer. Execute the following commands while inside the cgminer root folder. I.e /home/user/cgminer/ if you unpacked it there:
+
+CFLAGS="-O2 -Wall -march=native -I/opt/AMD-APP-SDK-v2.8.1.0-RC-lnx64/include" LDFLAGS="-L/opt/AMD-APP-
+SDK-v2.8.1.0-RC-lnx64/lib/x86" ./configure --enable-opencl --enable-scrypt
+
+sudo make
+sudo make install
+
+11. If all goes well you will see all your cards when you execute (Please note that it may fail if you are doing this via SSH):
+
+export DISPLAY=:0
+export GPU_USE_SYNC_OBJECTS=1
+export GPU_MAX_ALLOC_PERCENT=100
+export GPU_MAX_HEAP_SIZE=100
+./cgminer -n
+12. We want cgminer to automatically start mining whenever the rig is powered on. That way, we keep mining losses to a minimum whenever a power outage occurs, and we don’t have to worry about manually starting it back up in other situations.
+
+sudo nano miner_launcher.sh
+
+• Enter the following text into the editor (substitute your Xubuntu username where shown!): 
+#!/bin/bash
+DEFAULT_DELAY=0
+if [ "x$1" = "x" -o "x$1" = "xnone" ]; then
+DELAY=$DEFAULT_DELAY
+else
+DELAY=$1
+fi
+sleep $DELAY
+su YOUR_XUBUNTU_USERNAME -c "screen -dmS cgm /home/YOUR_XUBUNTU_USERNAME/cgminer/miner.sh"
+
+• Save and quit nano, and then type: 
+
+sudo chmod +x miner_launcher.sh
+
+• Now we need to call our new script during startup; we do that by adding it to /etc/rc.local. Type the following to open /etc/rc.local in nano: 
+
+sudo nano /etc/rc.local
+
+• Add the following text, right above the line that reads “exit 0″ (substitute your own username!): 
+
+/home/YOUR_XUBUNTU_USERNAME/miner_launcher.sh 30 &
+
+13. Create an alias to easily check on cgminer. We’re essentially done at this point, but you’ll probably want to manually SSH into your miner from time to time to manually check on your GPU temperatures & hashrates, etc. Creating an alias will make that easy.
+
+sudo nano .bashrc
+
+• Scroll to the end of the file, and then add this text above the line that reads “# enable programmable completion…” 
+
+alias cgm='screen -x cgm'
+
+• Save and quit out of nano.
+
+ 
+14. Create cgminer .sh. Below setting are for 270x
+
+cd cgminer
+sudo nano miner.sh
+./cgminer --scrypt -I 19 --thread-concurrency 15232 -o stratum+tcp://pot.leetpools.com:3333 -u <USER.WORKER> -p <PASSWORD>
+
+To over-clock add after thread concurrency
+--gpu-engine 1100 --gpu-memclock 1500 --gpu-vddc 1.087
+
+• Save and quit out of nano. Test cgminer
+./miner.sh
+
+That’s it—you’re done! You’ll probably want to test everything now. The easiest way to do that is issue sudo reboot and  the following should happen:
+
+1. Your miner should boot into Xubuntu. This may take about a minute, depending on the speed of your USB stick.
+
+2. 30 seconds after Xubuntu has loaded, cgminer will automatically start and begin mining. You’ll probably notice the fans on your GPUs spin up when this happens.
+
+3. You should be able to SSH into your miner at any time and type cgm to bring up the cgminer screen. To close the screen (and leave cgminer running), type control-A, then control-D.
+
+4. If you ever need to start cgminer manually (because you quit out of it, or kill it, etc), simply type 
+./miner_launcher.sh
